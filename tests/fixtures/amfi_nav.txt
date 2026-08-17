@@ -1,0 +1,20 @@
+Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+
+Open Ended Schemes(Other Scheme - Gold ETF)
+
+Nippon India Mutual Fund
+120823;INF204KB17I5;-;Nippon India ETF Gold BeES;89.4512;15-Aug-2026
+HDFC Mutual Fund
+139172;INF179KC1BM4;-;HDFC Gold Exchange Traded Fund;91.2033;15-Aug-2026
+SBI Mutual Fund
+119762;INF200KA1FS9;-;SBI Gold ETF;92.0140;15-Aug-2026
+UTI Mutual Fund
+120716;INF789FC1B39;-;UTI Gold Exchange Traded Fund;88.7701;15-Aug-2026
+
+Open Ended Schemes(Other Scheme - FoF Domestic)
+
+142031;INF204KB19X1;-;Nippon India Gold Savings Fund - Fund of Fund;28.4410;15-Aug-2026
+Axis Mutual Fund
+112277;INF846K01ES0;-;Axis Silver ETF;101.2200;15-Aug-2026
+Random Fund
+999999;INF000000000;-;Some Equity Growth Fund;450.1200;15-Aug-2026

@@ -16,6 +16,7 @@ derived figure. It never silently substitutes one for the other.
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 
 from bs4 import BeautifulSoup
 
@@ -182,7 +183,19 @@ def _mcx_gold() -> tuple[float, str]:
     if not candidates:
         raise CollectorError("no GOLD contract with a plausible price in the MCX market watch")
 
-    # Nearest expiry first where the date is parseable; otherwise take the first.
-    candidates.sort(key=lambda pair: pair[0])
+    # Front-month means nearest expiry. Sorting the raw strings would put
+    # "05DEC2026" before "05OCT2026" and pick the far contract, so parse the date.
+    candidates.sort(key=lambda pair: (_expiry_date(pair[0]) or date.max, pair[0]))
     expiry, price = candidates[0]
     return price, expiry
+
+
+def _expiry_date(raw: str) -> date | None:
+    """Parse MCX's `05DEC2026` style expiry. Returns None when unrecognised."""
+    text = raw.strip().upper()
+    for fmt in ("%d%b%Y", "%d-%b-%Y", "%d %b %Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None

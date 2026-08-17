@@ -9,6 +9,8 @@ packages = ["goldagent", "collectors"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Repo root on sys.path so `goldagent` and `collectors` import without an install.
+pythonpath = ["."]
 addopts = "-q --strict-markers"
 filterwarnings = [
     # yfinance is noisy about pandas internals; not our problem.

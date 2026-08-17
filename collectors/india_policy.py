@@ -34,13 +34,14 @@ FEEDS = {
     "Business Standard markets": "https://www.business-standard.com/rss/markets-106.rss",
 }
 
+# A headline must hit a policy term AND a gold term to be kept. These two sets
+# must stay disjoint: if a gold word also counted as a policy word, the AND would
+# be satisfied by any gold headline and the filter would let price stories through.
 POLICY_TERMS = (
-    "import duty", "customs duty", "duty", "gst", "cess", "tariff",
-    "gold", "bullion", "rbi", "reserve bank", "sovereign gold bond", "sgb",
-    "hallmark", "budget",
+    "import duty", "customs duty", "excise", "duty", "gst", "cess", "tariff",
+    "rbi", "reserve bank", "notification", "hallmark", "budget", "levy",
+    "monetisation", "monetization", "smuggling", "policy", "scheme",
 )
-
-# A headline must hit a policy term AND a gold term to be kept.
 GOLD_TERMS = ("gold", "bullion", "sgb", "sovereign gold bond")
 
 

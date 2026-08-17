@@ -1,0 +1,7 @@
+[
+ {"report_date_as_yyyy_mm_dd":"2026-08-11T00:00:00.000","cftc_contract_market_code":"088691","m_money_positions_long_all":"215430","m_money_positions_short_all":"48210","open_interest_all":"512300"},
+ {"report_date_as_yyyy_mm_dd":"2026-08-04T00:00:00.000","cftc_contract_market_code":"088691","m_money_positions_long_all":"198220","m_money_positions_short_all":"52110","open_interest_all":"501200"},
+ {"report_date_as_yyyy_mm_dd":"2026-07-28T00:00:00.000","cftc_contract_market_code":"088691","m_money_positions_long_all":"185400","m_money_positions_short_all":"57330","open_interest_all":"495000"},
+ {"report_date_as_yyyy_mm_dd":"2026-07-21T00:00:00.000","cftc_contract_market_code":"088691","m_money_positions_long_all":"176900","m_money_positions_short_all":"61200","open_interest_all":"488700"},
+ {"report_date_as_yyyy_mm_dd":"2026-07-14T00:00:00.000","cftc_contract_market_code":"088691","m_money_positions_long_all":"170100","m_money_positions_short_all":"64800","open_interest_all":"480100"}
+]

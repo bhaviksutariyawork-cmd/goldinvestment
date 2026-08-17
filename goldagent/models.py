@@ -71,7 +71,21 @@ class CollectorResult:
 
     @property
     def ok(self) -> bool:
+        """The collector ran without failing."""
         return not self.stale and self.error is None
+
+    @property
+    def has_data(self) -> bool:
+        """The collector ran AND produced a number or a headline.
+
+        Distinct from `ok` on purpose. A collector that successfully determined
+        there was nothing to report — no SGB activity, no FOMC meeting this week —
+        is `ok` but carries no data, and must not count toward the threshold that
+        decides whether there is enough material to write a briefing. Otherwise a
+        run where every price feed is down but every "nothing found" note came
+        back would look healthy and produce a briefing with no numbers in it.
+        """
+        return self.ok and bool(self.readings or self.headlines)
 
     def reading(self, metric: str) -> Reading | None:
         for r in self.readings:
@@ -89,11 +103,25 @@ class Snapshot:
 
     @property
     def ok_count(self) -> int:
+        """Collectors that ran without failing."""
         return sum(1 for r in self.results.values() if r.ok)
+
+    @property
+    def data_count(self) -> int:
+        """Collectors that actually produced readings or headlines.
+
+        This is the number the degraded-run check uses.
+        """
+        return sum(1 for r in self.results.values() if r.has_data)
 
     @property
     def failed(self) -> list[str]:
         return sorted(name for name, r in self.results.items() if not r.ok)
+
+    @property
+    def empty(self) -> list[str]:
+        """Ran fine but returned nothing — reported separately from failures."""
+        return sorted(name for name, r in self.results.items() if r.ok and not r.has_data)
 
     def all_readings(self) -> list[Reading]:
         out: list[Reading] = []

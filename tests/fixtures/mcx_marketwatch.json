@@ -1,0 +1,6 @@
+{"d":[
+ {"Symbol":"GOLD","ExpiryDate":"05OCT2026","LTP":"106880.00","ClosePrice":"106500.00"},
+ {"Symbol":"GOLD","ExpiryDate":"05DEC2026","LTP":"107950.00","ClosePrice":"107600.00"},
+ {"Symbol":"SILVER","ExpiryDate":"05DEC2026","LTP":"128400.00","ClosePrice":"128000.00"},
+ {"Symbol":"GOLDM","ExpiryDate":"05OCT2026","LTP":"106800.00","ClosePrice":"106400.00"}
+]}

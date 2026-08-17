@@ -68,11 +68,14 @@ def collect() -> CollectorResult:
         extra["previous_report_date"] = prior["date"].date().isoformat()
         extra["week_change"] = net - prior["net_long"]
 
-    # Percentile against the last ~6 months tells you whether "big" is actually big.
+    # Rank within the window tells you whether "big" is actually big. Scaled so the
+    # highest reading in the window is 100 and the lowest is 0 — dividing by the
+    # sample count instead would cap the maximum at (n-1)/n, so a genuinely
+    # extreme net long would read as 80th percentile on a five-report window.
     history = [r["net_long"] for r in reports]
     if len(history) >= 4:
         below = sum(1 for value in history if value < net)
-        extra["percentile_in_window"] = round(100.0 * below / len(history), 1)
+        extra["percentile_in_window"] = round(100.0 * below / (len(history) - 1), 1)
         extra["window_reports"] = len(history)
 
     result.readings.append(

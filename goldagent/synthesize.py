@@ -595,14 +595,14 @@ def degraded_notice(config: Config, snapshot: Snapshot) -> str:
     the model to speculate past its data.
     """
     failed = snapshot.failed
-    working = sorted(name for name, r in snapshot.results.items() if r.ok)
+    working = sorted(name for name, r in snapshot.results.items() if r.has_data)
     gold = snapshot.value("gold_usd_oz")
     inr = snapshot.value("gold_inr_per_10g")
 
     lines = [
         "*Degraded run — no briefing*",
         "",
-        f"Only {snapshot.ok_count} of {len(snapshot.results)} collectors returned data "
+        f"Only {snapshot.data_count} of {len(snapshot.results)} collectors returned data "
         f"(minimum for a briefing is {config.data_quality.min_collectors_ok}). "
         f"Not enough to form a view, so no analysis was generated.",
     ]
@@ -614,6 +614,7 @@ def degraded_notice(config: Config, snapshot: Snapshot) -> str:
     lines += [
         "",
         f"Failed: {', '.join(failed) or 'none'}",
-        f"Working: {', '.join(working) or 'none'}",
+        f"Returned nothing: {', '.join(snapshot.empty) or 'none'}",
+        f"With data: {', '.join(working) or 'none'}",
     ]
     return "\n".join(lines)

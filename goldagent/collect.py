@@ -102,7 +102,9 @@ def run(config: Config, secrets_fred_key: str | None = None) -> Snapshot:
         extra={
             "collectors": len(snapshot.results),
             "ok": snapshot.ok_count,
+            "with_data": snapshot.data_count,
             "failed": ",".join(snapshot.failed) or None,
+            "empty": ",".join(snapshot.empty) or None,
             "readings": len(snapshot.all_readings()),
             "headlines": len(snapshot.all_headlines()),
         },
@@ -374,8 +376,12 @@ def persist(conn, snapshot: Snapshot) -> dict[str, int]:
 
 
 def degraded(config: Config, snapshot: Snapshot) -> bool:
-    """True when too few collectors worked to justify a confident brief."""
-    return snapshot.ok_count < config.data_quality.min_collectors_ok
+    """True when too few collectors produced data to justify a confident brief.
+
+    Counts collectors that returned readings or headlines, not merely ones that
+    exited without error — see `CollectorResult.has_data`.
+    """
+    return snapshot.data_count < config.data_quality.min_collectors_ok
 
 
 def staleness_report(config: Config, snapshot: Snapshot, now: datetime | None = None) -> list[str]:
