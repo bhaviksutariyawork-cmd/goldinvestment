@@ -110,6 +110,30 @@ def run(config: Config, secrets_fred_key: str | None = None) -> Snapshot:
     return snapshot
 
 
+def quick(config: Config) -> Snapshot:
+    """Price and FX legs only, for interactive commands.
+
+    `/now` should answer in a couple of seconds. Running the full sixteen — COT,
+    AMFI's multi-megabyte NAV file, four GDELT queries — would take most of a
+    minute to answer a question about the current price. This collects the legs
+    the answer actually needs and derives the INR figure from them.
+    """
+    snapshot = Snapshot()
+    jobs = [
+        ("price_spot", price_spot.collect, {"divergence_pct": config.data_quality.spot_divergence_pct}),
+        ("fx", fx.collect, {}),
+        ("dollar_index", dollar_index.collect, {}),
+        ("silver", silver.collect, {}),
+    ]
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="quick") as pool:
+        futures = {name: pool.submit(fn, **kwargs) for name, fn, kwargs in jobs}
+        for name, future in futures.items():
+            snapshot.results[name] = _await(name, future)
+
+    _derive(snapshot, config)
+    return snapshot
+
+
 def _await(name: str, future: Future) -> CollectorResult:
     """Resolve a collector future, converting a hang into a reported gap."""
     try:

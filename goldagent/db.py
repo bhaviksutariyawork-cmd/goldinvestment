@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS level_hits (
     ts          TEXT NOT NULL,
     PRIMARY KEY (level_value, direction)
 );
+
+-- Levels added at runtime via the /set command.
+--
+-- These live here rather than in config/alerts.yaml on purpose: writing YAML
+-- programmatically would strip the file's comments, and that file is meant to
+-- stay hand-editable. Levels you commit by hand go in the YAML; levels you add
+-- from your phone go here. `/levels` reads both.
+CREATE TABLE IF NOT EXISTS user_levels (
+    value     REAL NOT NULL PRIMARY KEY,
+    direction TEXT NOT NULL DEFAULT 'either',
+    note      TEXT NOT NULL DEFAULT '',
+    added     TEXT NOT NULL
+);
 """
 
 
@@ -486,6 +499,52 @@ def mark_level_hit(
 def clear_level_hit(conn: sqlite3.Connection, value: float) -> None:
     conn.execute("DELETE FROM level_hits WHERE level_value = ?", (value,))
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# User-added price levels (the /set command)
+# --------------------------------------------------------------------------- #
+
+
+def add_user_level(
+    conn: sqlite3.Connection,
+    value: float,
+    direction: str = "either",
+    note: str = "",
+    now: datetime | None = None,
+) -> bool:
+    """Add a level. Returns False if that exact value was already set."""
+    existing = conn.execute("SELECT 1 FROM user_levels WHERE value = ?", (value,)).fetchone()
+    if existing:
+        return False
+    conn.execute(
+        "INSERT INTO user_levels (value, direction, note, added) VALUES (?,?,?,?)",
+        (value, direction, note, _iso(now or datetime.now(UTC))),
+    )
+    conn.commit()
+    return True
+
+
+def list_user_levels(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute("SELECT * FROM user_levels ORDER BY value ASC").fetchall()
+    return [
+        {
+            "value": row["value"],
+            "direction": row["direction"],
+            "note": row["note"],
+            "added": _parse(row["added"]),
+        }
+        for row in rows
+    ]
+
+
+def remove_user_level(conn: sqlite3.Connection, value: float) -> bool:
+    cursor = conn.execute("DELETE FROM user_levels WHERE value = ?", (value,))
+    conn.commit()
+    if cursor.rowcount:
+        clear_level_hit(conn, value)
+        return True
+    return False
 
 
 # --------------------------------------------------------------------------- #
