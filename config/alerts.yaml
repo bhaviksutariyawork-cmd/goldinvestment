@@ -1,0 +1,237 @@
+# Gold Market Intelligence Agent — alert & threshold configuration
+#
+# Everything tunable lives here. Code reads this file; code never hardcodes a
+# threshold. Edit, commit, push — the next scheduled run picks it up.
+#
+# Units are stated explicitly on every threshold. Where a value is a percentage
+# it is written as a percent (1.2 means 1.2%), not a fraction.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# Identity / locale
+# ---------------------------------------------------------------------------
+investor:
+  timezone: Asia/Kolkata          # all schedule + window logic resolves against this
+  home_currency: INR
+  physical_unit: "10g"            # Indian retail convention; USD/oz is the global leg
+  purity_reference: 995           # IBJA quotes 999 and 995; pick the one you buy
+
+# ---------------------------------------------------------------------------
+# Event-triggered alerts
+# ---------------------------------------------------------------------------
+alerts:
+  enabled: true
+
+  # Global rate limiting. Applies across ALL trigger types combined.
+  budget:
+    max_per_day: 3                # hard cap on event alerts per IST calendar day
+    cooldown_hours: 6             # per-trigger-type suppression after a fire
+    quiet_hours:                  # no event alerts inside this IST window
+      start: "02:00"
+      end: "06:00"
+    # Scheduled briefs (07:30 / 18:30 / Sunday) are NOT counted against
+    # max_per_day and are NOT suppressed by quiet_hours or /mute.
+
+  # Polling cadence for the event checker (cron is derived from this in the
+  # workflow; changing it here is documentation — the workflow cron is the
+  # source of truth for GitHub Actions and must be edited alongside it).
+  check_interval_minutes: 30
+  active_window:                  # IST; checker exits early outside this
+    start: "06:00"
+    end: "02:00"                  # wraps past midnight
+
+  triggers:
+
+    gold_move:
+      enabled: true
+      window_hours: 4             # rolling window
+      threshold_pct: 1.2          # absolute move, either direction
+      source: XAUUSD              # XAUUSD | GC=F  (which series defines the move)
+      cooldown_hours: 6           # overrides budget.cooldown_hours when set
+
+    dxy_move:
+      enabled: true
+      window_hours: 24
+      threshold_pct: 0.6
+      cooldown_hours: 6
+
+    real_yield_move:
+      enabled: true
+      series: DFII10              # US 10Y TIPS yield
+      window_hours: 24
+      threshold_bp: 8             # basis points, absolute
+      cooldown_hours: 12          # FRED updates once daily; long cooldown
+
+    gold_silver_ratio:
+      enabled: false              # off by default — noisy; enable if you trade it
+      window_hours: 24
+      threshold_abs: 2.0          # absolute change in the ratio itself
+      cooldown_hours: 12
+
+    conflict_escalation:
+      enabled: true
+      window_hours: 2                     # keywords must co-occur within this
+      min_independent_sources: 3          # distinct domains, not distinct articles
+      min_keyword_hits: 2                 # distinct keywords from the list below
+      cooldown_hours: 6
+      keywords:
+        - strike
+        - airstrike
+        - missile
+        - invasion
+        - mobilisation
+        - ceasefire collapse
+        - sanctions
+        - embargo
+        - blockade
+        - nuclear
+        - martial law
+        - state of emergency
+      # Domains counted as independent sources. Two URLs from the same domain
+      # count once. Aggregators are excluded deliberately.
+      independent_domains:
+        - reuters.com
+        - apnews.com
+        - aljazeera.com
+        - bbc.co.uk
+        - ft.com
+        - bloomberg.com
+        - kitco.com
+
+    rate_odds_shift:
+      enabled: true
+      window_hours: 24
+      threshold_pp: 10            # percentage points of implied cut probability
+      meeting: next               # next | specific ISO date e.g. 2026-09-17
+      cooldown_hours: 6
+
+    # Price levels you care about, in INR per 10g. The agent fires once when a
+    # level is crossed in either direction, then marks it triggered. `/set`
+    # appends here; `/levels` reads it.
+    inr_price_levels:
+      enabled: true
+      cooldown_hours: 12
+      levels:
+        # - value: 118000
+        #   direction: above        # above | below | either
+        #   note: "trim tranche 1"
+        #   triggered: false
+        #   added: 2026-08-17
+
+# ---------------------------------------------------------------------------
+# Data-quality gates — these produce a note in the brief, not an alert
+# ---------------------------------------------------------------------------
+data_quality:
+  # Cross-check GC=F against XAUUSD=X; flag when they disagree.
+  spot_divergence_pct: 0.3
+  # A collector's data older than this is reported as stale in the brief.
+  staleness_hours:
+    price: 6
+    fx: 6
+    macro: 48                     # FRED lags ~1 business day
+    etf_flows: 72                 # GLD updates daily, sometimes skips
+    cot: 240                      # weekly, Friday release
+    central_bank: 1080            # monthly WGC cadence
+    news: 12
+  # Below this many successful collectors, send a degraded-brief warning
+  # instead of a normal brief.
+  min_collectors_ok: 6
+
+# ---------------------------------------------------------------------------
+# Scheduled briefings
+# ---------------------------------------------------------------------------
+briefings:
+  morning:
+    enabled: true
+    ist_time: "07:30"
+    days: [mon, tue, wed, thu, fri, sat, sun]
+    max_words: 450
+    lookback_days: 7              # rows of history handed to the model
+
+  evening:
+    enabled: true
+    ist_time: "18:30"
+    days: [mon, tue, wed, thu, fri]
+    max_words: 250
+    lookback_days: 2
+    only_if_changed: true         # skip send if nothing material moved
+    change_floor_pct: 0.25        # "material" = gold moved at least this much
+
+  weekly:
+    enabled: true
+    ist_time: "10:00"
+    days: [sun]
+    max_words: 600
+    lookback_days: 30
+    include: [cot, etf_flows, central_bank, week_ahead_calendar]
+
+# ---------------------------------------------------------------------------
+# India-specific context the model is told to factor in
+# ---------------------------------------------------------------------------
+india:
+  # Verified at each run where a source exists; these are fallbacks used only
+  # when the customs/GST collector fails, and are labelled as such in the brief.
+  duty_stack_fallback:
+    import_duty_pct: 6.0
+    agri_infra_cess_pct: 5.0
+    gst_pct: 3.0
+    as_of: "2026-08-17"
+    note: "fallback only — collector output takes precedence"
+
+  seasonality:
+    enabled: true
+    lead_days: 21                 # start flagging this far ahead of an event
+    events:                       # date-only; year-agnostic entries recur
+      - name: Akshaya Tritiya
+        date: 2027-04-28
+      - name: Dhanteras
+        date: 2026-11-07
+      - name: Diwali
+        date: 2026-11-09
+      - name: wedding season (peak)
+        start: 2026-10-15
+        end: 2027-03-15
+
+  sovereign_gold_bond:
+    # Do NOT assume tranches are being issued. The collector reports the
+    # current RBI position; this only controls whether we look.
+    check_enabled: true
+
+# ---------------------------------------------------------------------------
+# Claude API cost guard
+# ---------------------------------------------------------------------------
+llm:
+  model: claude-sonnet-4-6
+  max_output_tokens: 2000
+  effort: medium                  # low | medium | high | xhigh | max
+  thinking: adaptive              # adaptive | disabled
+  spend:
+    daily_usd_cap: 1.50           # run aborts before calling if cap is hit
+    per_run_usd_cap: 0.25         # single-run guard against a runaway prompt
+    # Prices per million tokens, used for the local spend ledger. Update if
+    # Anthropic pricing changes — the guard is only as accurate as these.
+    input_usd_per_mtok: 3.00
+    output_usd_per_mtok: 15.00
+    on_cap_exceeded: notify       # notify | silent  (skip synthesis either way)
+
+# ---------------------------------------------------------------------------
+# Delivery
+# ---------------------------------------------------------------------------
+telegram:
+  parse_mode: Markdown
+  disable_web_page_preview: true
+  # Command polling shares the event-checker cron (watch.yml) — there is no
+  # separate command workflow. Worst-case /now latency is therefore equal to
+  # alerts.check_interval_minutes; average is half that.
+  #
+  # This repo is private (2,000 free Actions min/month). At a 30-minute watch
+  # interval the total is ~1,460 billed min/month, since GitHub rounds every
+  # job up to a whole minute. Adding a dedicated command workflow would exceed
+  # the free tier — raise alerts.check_interval_minutes instead if you need
+  # more headroom.
+  commands_enabled: true
+  command_poll_interval_minutes: 30   # informational; watch.yml cron is authoritative
+  mute:
+    max_duration_hours: 24        # ceiling on /mute <n>h
+  failure_notice: true            # post a short notice when a run dies
