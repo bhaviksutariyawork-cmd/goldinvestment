@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.env
+
+# The state DB is committed deliberately — see DESIGN.md. Journal/WAL files are not.
+state/*.db-journal
+state/*.db-wal
+state/*.db-shm
