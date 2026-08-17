@@ -1,0 +1,41 @@
+# 07:30 IST daily — the main overnight briefing. The US session has closed.
+name: Morning brief
+
+on:
+  schedule:
+    # 02:07 UTC = 07:37 IST. Seven minutes past the hour because GitHub's
+    # scheduler is most backed up at :00.
+    - cron: "7 2 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the brief without sending it
+        type: boolean
+        default: false
+
+concurrency:
+  group: goldagent-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Job level rather than step level: step-level env on a `uses:` step is a
+    # documented gotcha for composite actions, and these must reach the run step.
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/agent
+        with:
+          mode: morning
+          extra-args: ${{ inputs.dry_run && '--dry-run' || '' }}
+          commit-state: ${{ inputs.dry_run && 'false' || 'true' }}

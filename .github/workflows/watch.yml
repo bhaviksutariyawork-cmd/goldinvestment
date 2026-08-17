@@ -1,0 +1,50 @@
+# Event alerts and the Telegram command drain, every 30 minutes.
+#
+# The IST active window (06:00-02:00) is enforced in code, not in cron, so the
+# UTC schedule can stay coarse. Outside the window the run still drains commands
+# — a message sent overnight should be answered at 06:00, not dropped.
+#
+# Budget: 42 runs/day. GitHub bills each job rounded up to the whole minute, so
+# run count is the cost driver. Together with the three briefs this comes to
+# roughly 1,460 of the 2,000 free minutes/month on a private repo. Raising
+# alerts.check_interval_minutes in config/alerts.yaml is the lever if you need
+# more headroom — remember to change this cron to match.
+name: Watch
+
+on:
+  schedule:
+    # Every 30 minutes across 00:00-20:30 UTC, which covers 05:30-02:00 IST.
+    - cron: "3,33 0-20 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Show which alerts would fire without sending or committing
+        type: boolean
+        default: false
+
+concurrency:
+  group: goldagent-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    # Job level rather than step level: step-level env on a `uses:` step is a
+    # documented gotcha for composite actions, and these must reach the run step.
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/agent
+        with:
+          mode: watch
+          extra-args: ${{ inputs.dry_run && '--dry-run' || '' }}
+          commit-state: ${{ inputs.dry_run && 'false' || 'true' }}

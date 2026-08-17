@@ -1,0 +1,40 @@
+# Sunday 10:00 IST — COT positioning, ETF flows, central banks, week ahead.
+name: Weekly review
+
+on:
+  schedule:
+    # 04:37 UTC Sunday = 10:07 IST Sunday.
+    - cron: "37 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the review without sending it
+        type: boolean
+        default: false
+
+concurrency:
+  group: goldagent-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Job level rather than step level: step-level env on a `uses:` step is a
+    # documented gotcha for composite actions, and these must reach the run step.
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/agent
+        with:
+          mode: weekly
+          extra-args: ${{ inputs.dry_run && '--dry-run' || '' }}
+          commit-state: ${{ inputs.dry_run && 'false' || 'true' }}
