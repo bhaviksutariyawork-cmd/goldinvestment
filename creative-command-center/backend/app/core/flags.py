@@ -316,6 +316,12 @@ def _n(v: float | None, p: int = 2) -> str:
     return "n/a" if v is None else f"{v:.{p}f}"
 
 
+def _money(v: float | None) -> str:
+    """Amounts inside card copy. The currency symbol is the UI's job; the
+    thousands separators are not, because this string is also read in logs."""
+    return "n/a" if v is None else f"{v:,.0f}"
+
+
 # --- creative-level flags ---------------------------------------------------
 
 
@@ -444,7 +450,7 @@ def evaluate_creative(c: CreativeContext) -> list[Flag]:
                     trigger=f"best ROAS in {p.adset_name} at {_n(p.roas)} but only "
                             f"{_pct(p.delivery_share)} of its spend "
                             f"(floor {_pct(STARVED_DELIVERY_SHARE)})",
-                    detail=f"The rest of the ad set spent {_n(p.rival_spend)} at "
+                    detail=f"The rest of the ad set spent {_money(p.rival_spend)} at "
                            f"{_n(p.rival_roas)} ROAS. This is intra-ad-set misallocation — the "
                            "one place it is visible.",
                     money_at_stake=gap or p.rival_spend,
@@ -656,7 +662,7 @@ def evaluate_adset(a: AdsetContext) -> list[Flag]:
                     key="budget_underspend",
                     value=a.spend_7d,
                     threshold=UNDERSPEND_RATIO * expected,
-                    trigger=f"7d spend {_n(a.spend_7d)} vs {_n(expected)} budgeted "
+                    trigger=f"7d spend {_money(a.spend_7d)} vs {_money(expected)} budgeted "
                             f"({_pct(a.spend_7d / expected if expected else 0)} of plan)",
                     detail="Budget you are not using is budget the winners could have had.",
                     money_at_stake=expected - a.spend_7d,
@@ -723,7 +729,15 @@ def evaluate_account(acc: AccountContext) -> list[Flag]:
                 )
             )
 
+    gaps_per_category: dict[str, int] = {}
     for cell in acc.coverage_gaps:
+        gaps_per_category[cell["category"]] = gaps_per_category.get(cell["category"], 0) + 1
+
+    for cell in acc.coverage_gaps:
+        # Split the category's spend across its own gaps. Attributing the whole
+        # category to each cell would multiply it by the number of gaps and
+        # make the group total meaningless.
+        share = acc.category_spend.get(cell["category"], 0.0) / gaps_per_category[cell["category"]]
         flags.append(
             Flag(
                 key="coverage_gap",
@@ -737,8 +751,8 @@ def evaluate_account(acc: AccountContext) -> list[Flag]:
                 trigger=f"{int(cell['impressions']):,} cumulative impressions vs "
                         f"{COVERAGE_CELL_IMPRESSIONS:,}",
                 detail="Untested, not failed. Brief it before writing the angle off.",
-                money_at_stake=acc.category_spend.get(cell["category"], 0.0),
-                money_label="spend in a category with an untested angle",
+                money_at_stake=share,
+                money_label="share of category spend riding on the angles already tested",
                 proposal={"action": "brief_creative", "entity_type": "cell"},
             )
         )
@@ -760,7 +774,7 @@ def evaluate_account(acc: AccountContext) -> list[Flag]:
                     detail=f"{_pct(band['top_share'])} of band spend sits on "
                            f"{band['top_angle']}.",
                     money_at_stake=band["spend"],
-                    money_label="spend concentrated in this band",
+                    money_label="lifetime spend concentrated in this band",
                 )
             )
 

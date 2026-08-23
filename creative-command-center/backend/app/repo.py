@@ -12,6 +12,30 @@ def oid(value: str) -> ObjectId:
     return value if isinstance(value, ObjectId) else ObjectId(value)
 
 
+def with_string_id(doc: dict) -> dict:
+    """Replace the raw ObjectId with a string id.
+
+    Written as a statement rather than `{**doc, "id": str(doc.pop("_id"))}`:
+    the dict literal copies `doc` before the pop runs, so the ObjectId survives
+    into the response and FastAPI cannot encode it.
+    """
+    out = dict(doc)
+    out["id"] = str(out.pop("_id"))
+    return out
+
+
+def _date_query(account_id: str, since: str | None, until: str | None) -> dict:
+    query: dict = {"account_id": account_id, "is_current": True}
+    if since or until:
+        window: dict = {}
+        if since:
+            window["$gte"] = since
+        if until:
+            window["$lte"] = until
+        query["date"] = window
+    return query
+
+
 async def list_accounts(db) -> list[dict]:
     return [a async for a in db.accounts.find().sort("client_name", 1)]
 
@@ -23,31 +47,19 @@ async def get_account(db, account_id: str) -> dict | None:
 async def load_snapshots(
     db, account_id: str, since: str | None = None, until: str | None = None
 ) -> list[dict]:
-    query: dict = {"account_id": account_id, "is_current": True}
-    if since or until:
-        window: dict = {}
-        if since:
-            window["$gte"] = since
-        if until:
-            window["$lte"] = until
-        query["date"] = window
-    return [doc async for doc in db.snapshots_daily.find(query, {"_id": 0})]
+    return [
+        doc
+        async for doc in db.snapshots_daily.find(_date_query(account_id, since, until), {"_id": 0})
+    ]
 
 
 async def load_entity_daily(
     db, account_id: str, entity_type: str | None = None,
     since: str | None = None, until: str | None = None
 ) -> list[dict]:
-    query: dict = {"account_id": account_id, "is_current": True}
+    query = _date_query(account_id, since, until)
     if entity_type:
         query["entity_type"] = entity_type
-    if since or until:
-        window: dict = {}
-        if since:
-            window["$gte"] = since
-        if until:
-            window["$lte"] = until
-        query["date"] = window
     return [doc async for doc in db.entity_daily.find(query, {"_id": 0})]
 
 
@@ -64,16 +76,13 @@ async def load_reach_windows(db, account_id: str) -> list[dict]:
 async def creative_meta(db, account_id: str) -> dict[str, dict]:
     out: dict[str, dict] = {}
     async for doc in db.creative_meta.find({"account_id": account_id}):
-        doc["id"] = str(doc.pop("_id"))
-        out[str(doc["creative_id"])] = doc
+        tagged = with_string_id(doc)
+        out[str(tagged["creative_id"])] = tagged
     return out
 
 
 async def targets(db, account_id: str) -> list[dict]:
-    return [
-        {**t, "id": str(t.pop("_id"))}
-        async for t in db.targets.find({"account_id": account_id})
-    ]
+    return [with_string_id(t) async for t in db.targets.find({"account_id": account_id})]
 
 
 async def targets_by_band(db, account_id: str) -> dict[str, dict]:

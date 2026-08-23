@@ -103,6 +103,26 @@ SPECS = [
 ]
 
 
+# Real thumbnails come from the Marketing API and are cached per creative_id.
+# The demo account has no API behind it, so it draws its own — inline, so the
+# screens look right with no network at all.
+_SWATCHES = ["#3987e5", "#d95926", "#199e70", "#9085e9", "#d55181", "#c98500"]
+
+
+def _placeholder_thumbnail(spec: Spec) -> str:
+    import base64
+
+    swatch = _SWATCHES[sum(ord(c) for c in spec.creative_id) % len(_SWATCHES)]
+    initials = spec.ad_name[:4]
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">'
+        f'<rect width="160" height="160" fill="{swatch}" opacity="0.85"/>'
+        '<text x="80" y="94" font-family="system-ui,sans-serif" font-size="38" '
+        f'fill="#0d0d0d" text-anchor="middle">{initials}</text></svg>'
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
 def _row(day: date, spec: Spec, values: dict) -> dict:
     campaign_id, campaign_name = CAMPAIGNS[spec.campaign_ix]
     adset_id, adset_name = ADSETS[spec.adset_ix]
@@ -118,7 +138,7 @@ def _row(day: date, spec: Spec, values: dict) -> dict:
         "ad_id": f"ad_{spec.creative_id}_{adset_id}",
         "ad_name": spec.ad_name,
         "creative_id": spec.creative_id,
-        "thumbnail_url": f"https://picsum.photos/seed/{spec.creative_id}/160/160",
+        "thumbnail_url": _placeholder_thumbnail(spec),
         "effective_status": spec.status,
         "objective": spec.objective,
         "amount_spent": round(spend, 2),
@@ -206,32 +226,66 @@ def generate(days: int = 90, as_of: date | None = None, seed: int = 7,
 
 def entity_rows(days: int = 90, as_of: date | None = None,
                 account_id: str = "seed") -> list[dict]:
-    """`entity_daily` for ad sets, so budget pacing has a budget to pace against."""
+    """`entity_daily` for ad sets and campaigns.
+
+    Ad-set rows carry the budgets that budget pacing paces against. Campaign
+    rows carry the same measures as the ad-level pull, so the reconcile check
+    has a second, independently-grouped total to compare against — which is
+    the whole point of it.
+    """
     as_of = as_of or date.today()
     # Sized just above actual delivery, except 60012, which cannot spend what
     # it was given — that is the Budget Underspend flag with something to say.
     budgets = {"60011": 2800.0, "60012": 2400.0, "60013": 1500.0,
                "60014": 2200.0, "60015": 1600.0, "60016": 4000.0}
-    rows = []
-    for offset in range(days):
-        day = as_of - timedelta(days=days - 1 - offset)
-        for adset_id, name in ADSETS:
-            rows.append(
-                {
+    snapshots = generate(days, as_of=as_of, account_id=account_id)
+
+    SUMMED = ("amount_spent", "impressions", "reach", "outbound_clicks",
+              "omni_landing_page_view", "omni_add_to_cart", "omni_purchase")
+    totals: dict[tuple[str, str, str], dict] = {}
+
+    for row in snapshots:
+        for entity_type, entity_id, name in (
+            ("adset", row["adset_id"], row["adset_name"]),
+            ("campaign", row["campaign_id"], row["campaign_name"]),
+        ):
+            key = (entity_type, entity_id, row["date"])
+            entry = totals.get(key)
+            if entry is None:
+                entry = totals[key] = {
                     "account_id": account_id,
-                    "entity_type": "adset",
-                    "entity_id": adset_id,
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
                     "name": name,
-                    "date": day.isoformat(),
-                    "daily_budget": budgets[adset_id],
+                    "date": row["date"],
+                    "campaign_id": row["campaign_id"],
+                    "campaign_name": row["campaign_name"],
+                    "objective": row["objective"],
+                    "daily_budget": budgets.get(entity_id),
                     "lifetime_budget": None,
                     "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
                     "optimization_goal": "OFFSITE_CONVERSIONS",
                     "delivery_status": "ACTIVE",
                     "is_current": True,
                     "revision": 1,
+                    "_revenue": 0.0,
+                    **dict.fromkeys(SUMMED, 0.0),
                 }
-            )
+            for field in SUMMED:
+                entry[field] += row[field]
+            entry["_revenue"] += row["amount_spent"] * row["purchase_roas"]
+
+    rows = []
+    for entry in totals.values():
+        revenue = entry.pop("_revenue")
+        spend = entry["amount_spent"]
+        # The ratio is derived from the sums, never by averaging daily ratios —
+        # and it is stored raw, exactly as the API would report it.
+        entry["purchase_roas"] = round(revenue / spend, 4) if spend else 0.0
+        entry["frequency"] = (
+            round(entry["impressions"] / entry["reach"], 3) if entry["reach"] else 0.0
+        )
+        rows.append(entry)
     return rows
 
 

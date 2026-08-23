@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from ..crypto import TokenVaultError, encrypt_token, mask
 from ..db import get_db
 from ..models import AccountIn, AccountOut, TargetIn
+from ..repo import with_string_id
 from ..service import invalidate
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -101,9 +102,7 @@ async def list_targets(account_id: str):
     ROAS target mislabels both.
     """
     db = get_db()
-    targets = [
-        {**t, "id": str(t.pop("_id"))} async for t in db.targets.find({"account_id": account_id})
-    ]
+    targets = [with_string_id(t) async for t in db.targets.find({"account_id": account_id})]
     return {
         "targets": targets,
         "bands_set": sorted({t["aov_band"] for t in targets}),
